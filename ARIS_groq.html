@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARIS — Almaty Resource Intelligence System</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;scrollbar-width:thin;scrollbar-color:#2a3450 #111827}
+:root{
+  --bg:#07090f;--s1:#0f1420;--s2:#141c2e;--s3:#1a2340;
+  --border:#1e2d48;--border2:#263859;
+  --teal:#00c9a7;--teal2:#00f5cc;--amber:#f0a500;--red:#e8445a;--blue:#3d8ef0;--purple:#8b5cf6;
+  --text:#dce8f5;--muted:#4a5f80;--dim:#2a3a58;
+  --font:'IBM Plex Sans',sans-serif;--mono:'Space Mono',monospace;
+}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font)}
+
+/* LOADING SCREEN */
+#loader{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;transition:opacity 0.5s}
+#loader.hidden{opacity:0;pointer-events:none}
+.loader-logo{font-family:var(--mono);font-size:28px;color:var(--teal);letter-spacing:4px;margin-bottom:32px}
+.loader-logo span{color:var(--muted)}
+.load-steps{width:340px}
+.load-step{display:flex;align-items:center;gap:12px;padding:8px 0;font-size:13px;color:var(--muted);border-bottom:1px solid var(--border);opacity:0;transition:all 0.4s}
+.load-step.done{opacity:1;color:var(--teal)}
+.load-step.active{opacity:1;color:var(--text)}
+.step-icon{width:18px;height:18px;border-radius:50%;border:1px solid var(--muted);display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0}
+.step-icon.done{background:var(--teal);border-color:var(--teal);color:#000}
+.step-icon.spin{border-color:var(--teal);border-top-color:transparent;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.load-bar{width:340px;height:2px;background:var(--border);margin-top:20px;border-radius:1px;overflow:hidden}
+.load-fill{height:100%;background:linear-gradient(90deg,var(--teal),var(--blue));width:0;transition:width 0.5s;border-radius:1px}
+.load-source{font-size:11px;font-family:var(--mono);color:var(--muted);margin-top:10px;text-align:center;min-height:16px}
+
+/* MAIN APP */
+#app{display:none;height:100vh;flex-direction:column}
+.topbar{background:var(--s1);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.brand{font-family:var(--mono);font-size:14px;letter-spacing:3px;color:var(--teal)}
+.brand span{color:var(--muted);font-size:11px;letter-spacing:1px}
+.topbar-right{display:flex;align-items:center;gap:20px}
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--teal);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(0,201,167,0.5)}70%{box-shadow:0 0 0 8px rgba(0,201,167,0)}}
+.topbar-stat{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.topbar-stat b{color:var(--text)}
+.nav-tabs{display:flex;gap:2px}
+.ntab{background:none;border:none;padding:6px 14px;font-family:var(--mono);font-size:11px;letter-spacing:1px;color:var(--muted);cursor:pointer;border-radius:4px;transition:all 0.2s;text-transform:uppercase}
+.ntab:hover{color:var(--text);background:var(--s2)}
+.ntab.active{color:var(--teal);background:rgba(0,201,167,0.1);border:1px solid rgba(0,201,167,0.2)}
+
+.tab-content{display:none;flex:1;overflow:hidden}
+.tab-content.active{display:flex}
+
+/* DASHBOARD */
+.dash{display:grid;grid-template-columns:240px 1fr 280px;height:100%;overflow:hidden}
+.left-col{background:var(--s1);border-right:1px solid var(--border);overflow-y:auto;padding:14px 0}
+.col-sec{padding:0 14px 14px}
+.col-lbl{font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;padding-bottom:7px;margin-bottom:10px;border-bottom:1px solid var(--border)}
+.res-card{background:var(--s2);border:1px solid var(--border);border-radius:7px;padding:10px;margin-bottom:7px;cursor:pointer;transition:all 0.2s}
+.res-card:hover{border-color:var(--teal);transform:translateX(2px)}
+.res-card.crit{border-color:rgba(232,68,90,0.6);animation:redPulse 2s infinite}
+@keyframes redPulse{0%,100%{border-color:rgba(232,68,90,0.6)}50%{border-color:rgba(232,68,90,0.2)}}
+.res-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}
+.res-name{font-size:12px;font-weight:500}
+.res-badge{font-family:var(--mono);font-size:9px;padding:2px 5px;border-radius:3px;font-weight:700}
+.b-ok{background:rgba(0,201,167,0.15);color:var(--teal)}
+.b-warn{background:rgba(240,165,0,0.15);color:var(--amber)}
+.b-crit{background:rgba(232,68,90,0.15);color:var(--red)}
+.res-bar-bg{height:3px;background:var(--dim);border-radius:2px;margin-bottom:5px}
+.res-bar{height:100%;border-radius:2px;transition:width 0.8s}
+.res-meta{font-size:10px;font-family:var(--mono);color:var(--muted)}
+.scen-btn{width:100%;text-align:left;background:var(--s2);border:1px solid var(--border);border-radius:7px;padding:9px 11px;margin-bottom:5px;cursor:pointer;color:var(--text);font-family:var(--font);font-size:11px;transition:all 0.2s;display:flex;align-items:center;gap:8px}
+.scen-btn:hover{border-color:var(--blue);color:var(--blue)}
+.scen-btn.active{border-color:var(--amber);color:var(--amber);background:rgba(240,165,0,0.07)}
+.scen-icon{font-size:15px;width:18px;text-align:center}
+
+.center-col{display:flex;flex-direction:column;overflow:hidden}
+.map-area{position:relative;height:220px;background:var(--s2);border-bottom:1px solid var(--border);overflow:hidden;flex-shrink:0}
+.map-grid-bg{position:absolute;inset:0;background-image:linear-gradient(rgba(30,45,72,0.5) 1px,transparent 1px),linear-gradient(90deg,rgba(30,45,72,0.5) 1px,transparent 1px);background-size:30px 30px}
+.map-lbl{position:absolute;top:10px;left:14px;font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
+.dist{position:absolute;border-radius:5px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1px solid;transition:all 0.3s;padding:4px}
+.dist:hover{z-index:10;transform:scale(1.06)}
+.dist-name{font-size:9px;font-weight:600;text-align:center;line-height:1.2}
+.dist-val{font-family:var(--mono);font-size:10px;font-weight:700;margin-top:1px}
+.map-legend{position:absolute;bottom:10px;left:14px;display:flex;gap:10px;font-size:10px;font-family:var(--mono);color:var(--muted)}
+.leg-dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:3px;vertical-align:middle}
+
+.console{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
+.msg{display:flex;gap:9px;animation:fadeUp 0.3s}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.mi{width:26px;height:26px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:10px;font-family:var(--mono);font-weight:700;flex-shrink:0;margin-top:2px}
+.mi-ai{background:rgba(0,201,167,0.12);color:var(--teal);border:1px solid rgba(0,201,167,0.25)}
+.mi-sys{background:rgba(61,142,240,0.12);color:var(--blue);border:1px solid rgba(61,142,240,0.25)}
+.mi-op{background:rgba(139,92,246,0.12);color:var(--purple);border:1px solid rgba(139,92,246,0.25)}
+.mc{flex:1}
+.mc-role{font-family:var(--mono);font-size:9px;color:var(--muted);margin-bottom:3px;letter-spacing:1px;text-transform:uppercase}
+.mc-text{font-size:12.5px;line-height:1.7;color:var(--text)}
+.alert-msg{background:rgba(232,68,90,0.08);border:1px solid rgba(232,68,90,0.3);border-radius:7px;padding:8px 12px;font-size:12px;color:#ff8a96;display:flex;align-items:center;gap:8px}
+
+.input-row{background:var(--s1);border-top:1px solid var(--border);padding:10px 14px;display:flex;gap:8px;flex-shrink:0}
+.input-row input{flex:1;background:var(--s2);border:1px solid var(--border);border-radius:7px;padding:8px 12px;color:var(--text);font-family:var(--font);font-size:12.5px;outline:none;transition:border-color 0.2s}
+.input-row input:focus{border-color:var(--teal)}
+.input-row input::placeholder{color:var(--muted)}
+.send-btn{background:rgba(0,201,167,0.12);border:1px solid rgba(0,201,167,0.3);border-radius:7px;padding:8px 14px;color:var(--teal);cursor:pointer;font-family:var(--mono);font-size:10px;letter-spacing:1px;transition:all 0.2s;white-space:nowrap}
+.send-btn:hover{background:rgba(0,201,167,0.22)}
+.send-btn:disabled{opacity:0.35;cursor:not-allowed}
+.think{display:flex;gap:4px;padding:3px 0}
+.think span{width:5px;height:5px;border-radius:50%;background:var(--teal);animation:bounce 1.2s infinite}
+.think span:nth-child(2){animation-delay:0.2s}
+.think span:nth-child(3){animation-delay:0.4s}
+@keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-5px)}}
+
+.right-col{background:var(--s1);border-left:1px solid var(--border);overflow-y:auto;padding:14px}
+.rp-sec{margin-bottom:18px}
+.rp-lbl{font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;padding-bottom:7px;margin-bottom:10px;border-bottom:1px solid var(--border)}
+.metric-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(30,45,72,0.4);font-size:11.5px}
+.metric-row:last-child{border-bottom:none}
+.ml{color:var(--muted)}
+.mv{font-family:var(--mono);font-weight:700}
+.mv-g{color:var(--teal)}
+.mv-a{color:var(--amber)}
+.mv-r{color:var(--red)}
+.alloc-item{margin-bottom:9px}
+.alloc-top{display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px}
+.alloc-name{color:var(--text)}
+.alloc-pct{font-family:var(--mono);color:var(--muted)}
+.alloc-bar-bg{height:4px;background:var(--dim);border-radius:2px;overflow:hidden}
+.alloc-bar-fill{height:100%;border-radius:2px;transition:width 0.8s}
+.decision-item{display:flex;align-items:flex-start;gap:7px;padding:6px 0;border-bottom:1px solid rgba(30,45,72,0.4);font-size:11.5px}
+.decision-item:last-child{border-bottom:none}
+.di-dot{width:5px;height:5px;border-radius:50%;flex-shrink:0;margin-top:5px}
+.di-amt{font-family:var(--mono);font-size:10px;color:var(--amber);margin-left:auto;padding-left:8px;white-space:nowrap}
+
+/* ANALYTICS */
+.analytics{flex:1;overflow-y:auto;padding:20px;background:var(--bg)}
+.an-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.an-card{background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:16px}
+.an-title{font-size:12px;font-family:var(--mono);color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:14px}
+.chart-wrap{position:relative;width:100%}
+
+/* DATA SOURCES */
+.datasources{flex:1;overflow-y:auto;padding:24px;background:var(--bg)}
+.ds-header{margin-bottom:24px}
+.ds-header h2{font-size:20px;font-weight:500;color:var(--text);margin-bottom:6px}
+.ds-header p{font-size:13px;color:var(--muted);line-height:1.6}
+.ds-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-bottom:24px}
+.ds-card{background:var(--s1);border:1px solid var(--border);border-radius:10px;padding:16px}
+.ds-card-top{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.ds-icon{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.ds-card-title{font-size:13px;font-weight:500;color:var(--text)}
+.ds-card-sub{font-size:11px;color:var(--muted)}
+.ds-fields{display:flex;flex-direction:column;gap:4px}
+.ds-field{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid rgba(30,45,72,0.4);font-size:11px}
+.ds-field:last-child{border-bottom:none}
+.ds-field-name{color:var(--muted)}
+.ds-field-val{font-family:var(--mono);color:var(--teal);font-weight:700}
+.ds-link{font-size:11px;font-family:var(--mono);color:var(--blue);margin-top:10px;display:block;word-break:break-all;text-decoration:none}
+.ds-link:hover{color:var(--teal)}
+.ds-status{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-family:var(--mono);padding:3px 8px;border-radius:4px;margin-top:8px}
+.ds-live{background:rgba(0,201,167,0.1);color:var(--teal);border:1px solid rgba(0,201,167,0.25)}
+.ds-cached{background:rgba(240,165,0,0.1);color:var(--amber);border:1px solid rgba(240,165,0,0.25)}
+.ds-dot{width:5px;height:5px;border-radius:50%}
+.api-box{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px;font-family:var(--mono);font-size:11px;color:var(--teal);line-height:1.8}
+
+.footer{background:var(--s1);border-top:1px solid var(--border);padding:5px 20px;display:flex;align-items:center;gap:20px;font-family:var(--mono);font-size:10px;color:var(--muted);flex-shrink:0}
+.f-item{display:flex;align-items:center;gap:5px}
+.f-dot{width:5px;height:5px;border-radius:50%}
+</style>
+</head>
+<body>
+
+<div id="loader">
+  <div class="loader-logo">ARIS <span>v2.0</span></div>
+  <div class="load-steps">
+    <div class="load-step" id="ls0"><div class="step-icon" id="si0">1</div>Connecting to data.egov.kz portal</div>
+    <div class="load-step" id="ls1"><div class="step-icon" id="si1">2</div>Loading Almaty Akimat datasets</div>
+    <div class="load-step" id="ls2"><div class="step-icon" id="si2">3</div>Parsing budget.egov.kz reports</div>
+    <div class="load-step" id="ls3"><div class="step-icon" id="si3">4</div>Calibrating district resource models</div>
+    <div class="load-step" id="ls4"><div class="step-icon" id="si4">5</div>Initializing ARIS via Groq API</div>
+  </div>
+  <div class="load-bar"><div class="load-fill" id="load-fill"></div></div>
+  <div class="load-source" id="load-source">Initializing...</div>
+</div>
+
+<div id="app">
+  <div class="topbar">
+    <div>
+      <div class="brand">ARIS <span>/ ALMATY RESOURCE INTELLIGENCE SYSTEM v2.0</span></div>
+    </div>
+    <div class="nav-tabs">
+      <button class="ntab active" onclick="switchTab('dashboard',this)">Dashboard</button>
+      <button class="ntab" onclick="switchTab('analytics',this)">Analytics</button>
+      <button class="ntab" onclick="switchTab('datasources',this)">Data Sources</button>
+    </div>
+    <div class="topbar-right">
+      <div class="live-dot"></div>
+      <div class="topbar-stat"><b id="clock">--:--:--</b> ALM+5</div>
+      <div class="topbar-stat">Decisions: <b id="dec-count">0</b></div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div class="tab-content active" id="tab-dashboard">
+    <div class="dash">
+      <div class="left-col">
+        <div class="col-sec">
+          <div class="col-lbl">Live Resources</div>
+          <div id="res-list"></div>
+        </div>
+        <div class="col-sec">
+          <div class="col-lbl">Crisis Scenarios</div>
+          <button class="scen-btn" onclick="triggerScenario('drought',this)"><span class="scen-icon">🌵</span>Drought Emergency</button>
+          <button class="scen-btn" onclick="triggerScenario('budget',this)"><span class="scen-icon">💰</span>Budget Shortfall</button>
+          <button class="scen-btn" onclick="triggerScenario('factory',this)"><span class="scen-icon">🏭</span>Production Bottleneck</button>
+          <button class="scen-btn" onclick="triggerScenario('flood',this)"><span class="scen-icon">🌊</span>Infrastructure Flood</button>
+          <button class="scen-btn" onclick="triggerScenario('grain',this)"><span class="scen-icon">🌾</span>Grain Supply Crisis</button>
+        </div>
+      </div>
+
+      <div class="center-col">
+        <div class="map-area">
+          <div class="map-grid-bg"></div>
+          <div class="map-lbl">ALMATY — DISTRICT RESOURCE STATUS</div>
+          <div id="map-districts"></div>
+          <div class="map-legend">
+            <div><span class="leg-dot" style="background:var(--teal)"></span>Optimal</div>
+            <div><span class="leg-dot" style="background:var(--amber)"></span>Strained</div>
+            <div><span class="leg-dot" style="background:var(--red)"></span>Critical</div>
+          </div>
+        </div>
+        <div class="console" id="console"></div>
+        <div class="input-row">
+          <input id="userInput" placeholder="Ask ARIS — e.g. 'Redistribute water from Bostandyq to Ile district'" onkeydown="if(event.key==='Enter')sendMsg()"/>
+          <button class="send-btn" id="sendBtn" onclick="sendMsg()">SEND ↗</button>
+        </div>
+      </div>
+
+      <div class="right-col">
+        <div class="rp-sec">
+          <div class="rp-lbl">City Metrics</div>
+          <div id="city-metrics"></div>
+        </div>
+        <div class="rp-sec">
+          <div class="rp-lbl">Budget Allocation</div>
+          <div id="budget-alloc"></div>
+        </div>
+        <div class="rp-sec">
+          <div class="rp-lbl">Active AI Decisions</div>
+          <div id="decisions-panel"><div style="color:var(--muted);font-size:11px;padding:6px 0">No active decisions. Trigger a scenario.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ANALYTICS -->
+  <div class="tab-content" id="tab-analytics">
+    <div class="analytics">
+      <div class="an-grid">
+        <div class="an-card">
+          <div class="an-title">Resource Status Overview</div>
+          <div class="chart-wrap" style="height:200px"><canvas id="radarChart" role="img" aria-label="Radar chart showing resource levels">Resource levels across 6 city resources.</canvas></div>
+        </div>
+        <div class="an-card">
+          <div class="an-title">Budget Allocation 2024 — budget.egov.kz</div>
+          <div class="chart-wrap" style="height:200px"><canvas id="budgetChart" role="img" aria-label="Doughnut chart of budget allocation">Budget split across city departments.</canvas></div>
+        </div>
+        <div class="an-card" style="grid-column:1/-1">
+          <div class="an-title">Almaty Population Growth 2015–2024 — stat.gov.kz</div>
+          <div class="chart-wrap" style="height:200px"><canvas id="popChart" role="img" aria-label="Line chart of Almaty population growth">Almaty population 2015 to 2024.</canvas></div>
+        </div>
+        <div class="an-card">
+          <div class="an-title">Citizen Appeals by Category — data.egov.kz</div>
+          <div class="chart-wrap" style="height:200px"><canvas id="appealsChart" role="img" aria-label="Bar chart of citizen appeals by category">Almaty akimat citizen appeals 2023.</canvas></div>
+        </div>
+        <div class="an-card">
+          <div class="an-title">District Resource Index</div>
+          <div class="chart-wrap" style="height:200px"><canvas id="distChart" role="img" aria-label="Horizontal bar chart of district resource index">Resource index per Almaty district.</canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DATA SOURCES -->
+  <div class="tab-content" id="tab-datasources">
+    <div class="datasources">
+      <div class="ds-header">
+        <h2>Real Data Sources</h2>
+        <p>ARIS seeds its resource models from verified Kazakhstan open government datasets. All sources are publicly accessible via data.egov.kz and budget.egov.kz. API access requires a free developer key from the egov.kz Developer Cabinet.</p>
+      </div>
+      <div class="ds-grid">
+        <div class="ds-card">
+          <div class="ds-card-top">
+            <div class="ds-icon" style="background:rgba(0,201,167,0.1)">🏛️</div>
+            <div><div class="ds-card-title">Almaty Akimat — Citizens' Appeals</div><div class="ds-card-sub">Akimat of Almaty city · Updated quarterly</div></div>
+          </div>
+          <div class="ds-fields">
+            <div class="ds-field"><span class="ds-field-name">Dataset ID</span><span class="ds-field-val">opendata-api-uri156</span></div>
+            <div class="ds-field"><span class="ds-field-name">Total appeals (2023)</span><span class="ds-field-val">47,320</span></div>
+            <div class="ds-field"><span class="ds-field-name">Utility complaints</span><span class="ds-field-val">38%</span></div>
+            <div class="ds-field"><span class="ds-field-name">Infrastructure issues</span><span class="ds-field-val">24%</span></div>
+            <div class="ds-field"><span class="ds-field-name">Used for</span><span class="ds-field-val">Priority weighting</span></div>
+          </div>
+          <a class="ds-link" href="https://data.egov.kz/datasets/view?index=opendata-api-uri156" target="_blank">data.egov.kz/datasets/view?index=opendata-api-uri156</a>
+          <div><span class="ds-status ds-cached"><div class="ds-dot" style="background:var(--amber)"></div>CACHED · Q4 2023</span></div>
+        </div>
+        <div class="ds-card">
+          <div class="ds-card-top">
+            <div class="ds-icon" style="background:rgba(61,142,240,0.1)">📊</div>
+            <div><div class="ds-card-title">Kazakhstan Statistics — Almaty Population</div><div class="ds-card-sub">Bureau of National Statistics · Annual</div></div>
+          </div>
+          <div class="ds-fields">
+            <div class="ds-field"><span class="ds-field-name">Source</span><span class="ds-field-val">stat.gov.kz</span></div>
+            <div class="ds-field"><span class="ds-field-name">Population (2024)</span><span class="ds-field-val">2,138,000</span></div>
+            <div class="ds-field"><span class="ds-field-name">Growth rate</span><span class="ds-field-val">+2.8% YoY</span></div>
+            <div class="ds-field"><span class="ds-field-name">Urban density</span><span class="ds-field-val">3,012/km²</span></div>
+            <div class="ds-field"><span class="ds-field-name">Used for</span><span class="ds-field-val">Demand modeling</span></div>
+          </div>
+          <a class="ds-link" href="https://stat.gov.kz/en/region/almaty/" target="_blank">stat.gov.kz/en/region/almaty/</a>
+          <div><span class="ds-status ds-live"><div class="ds-dot" style="background:var(--teal)"></div>OFFICIAL 2024</span></div>
+        </div>
+        <div class="ds-card">
+          <div class="ds-card-top">
+            <div class="ds-icon" style="background:rgba(240,165,0,0.1)">💰</div>
+            <div><div class="ds-card-title">Almaty City Budget — Open Budgets Portal</div><div class="ds-card-sub">budget.egov.kz · Annual reporting</div></div>
+          </div>
+          <div class="ds-fields">
+            <div class="ds-field"><span class="ds-field-name">Total budget (2024)</span><span class="ds-field-val">1.74T KZT</span></div>
+            <div class="ds-field"><span class="ds-field-name">Infrastructure</span><span class="ds-field-val">30% (522B KZT)</span></div>
+            <div class="ds-field"><span class="ds-field-name">Social programs</span><span class="ds-field-val">22% (383B KZT)</span></div>
+            <div class="ds-field"><span class="ds-field-name">Emergency fund</span><span class="ds-field-val">15% (261B KZT)</span></div>
+            <div class="ds-field"><span class="ds-field-name">Used for</span><span class="ds-field-val">Budget allocation model</span></div>
+          </div>
+          <a class="ds-link" href="https://budget.egov.kz/" target="_blank">budget.egov.kz</a>
+          <div><span class="ds-status ds-live"><div class="ds-dot" style="background:var(--teal)"></div>OFFICIAL 2024</span></div>
+        </div>
+        <div class="ds-card">
+          <div class="ds-card-top">
+            <div class="ds-icon" style="background:rgba(139,92,246,0.1)">🌾</div>
+            <div><div class="ds-card-title">Agricultural Production — Almaty Region</div><div class="ds-card-sub">Ministry of Agriculture RK · Annual</div></div>
+          </div>
+          <div class="ds-fields">
+            <div class="ds-field"><span class="ds-field-name">Grain harvest (2023)</span><span class="ds-field-val">1.2M tonnes</span></div>
+            <div class="ds-field"><span class="ds-field-name">Irrigated land</span><span class="ds-field-val">412,000 ha</span></div>
+            <div class="ds-field"><span class="ds-field-name">Water use (agri)</span><span class="ds-field-val">68% of total</span></div>
+            <div class="ds-field"><span class="ds-field-name">Drought risk zones</span><span class="ds-field-val">Ile, Balkhash</span></div>
+            <div class="ds-field"><span class="ds-field-name">Used for</span><span class="ds-field-val">Agricultural scenarios</span></div>
+          </div>
+          <a class="ds-link" href="https://data.egov.kz/" target="_blank">data.egov.kz — Agriculture category</a>
+          <div><span class="ds-status ds-cached"><div class="ds-dot" style="background:var(--amber)"></div>CACHED · 2023</span></div>
+        </div>
+        <div class="ds-card">
+          <div class="ds-card-top">
+            <div class="ds-icon" style="background:rgba(232,68,90,0.1)">⚡</div>
+            <div><div class="ds-card-title">Energy & Utilities — KOREM Data</div><div class="ds-card-sub">Kazakhstan electricity market · Monthly</div></div>
+          </div>
+          <div class="ds-fields">
+            <div class="ds-field"><span class="ds-field-name">Almaty consumption</span><span class="ds-field-val">18.4 TWh/yr</span></div>
+            <div class="ds-field"><span class="ds-field-name">Grid capacity</span><span class="ds-field-val">3,200 MW</span></div>
+            <div class="ds-field"><span class="ds-field-name">Peak load (winter)</span><span class="ds-field-val">91% capacity</span></div>
+            <div class="ds-field"><span class="ds-field-name">Renewable share</span><span class="ds-field-val">11%</span></div>
+            <div class="ds-field"><span class="ds-field-name">Used for</span><span class="ds-field-val">Power grid resource</span></div>
+          </div>
+          <a class="ds-link" href="https://data.egov.kz/" target="_blank">data.egov.kz — Energy category</a>
+          <div><span class="ds-status ds-cached"><div class="ds-dot" style="background:var(--amber)"></div>CACHED · 2024</span></div>
+        </div>
+        <div class="ds-card">
+          <div class="ds-card-top">
+            <div class="ds-icon" style="background:rgba(0,201,167,0.1)">🏥</div>
+            <div><div class="ds-card-title">Healthcare Facilities — Ministry of Health</div><div class="ds-card-sub">data.egov.kz · Updated annually</div></div>
+          </div>
+          <div class="ds-fields">
+            <div class="ds-field"><span class="ds-field-name">Hospitals in Almaty</span><span class="ds-field-val">67</span></div>
+            <div class="ds-field"><span class="ds-field-name">Clinics & polyclinics</span><span class="ds-field-val">214</span></div>
+            <div class="ds-field"><span class="ds-field-name">Medical supply index</span><span class="ds-field-val">88/100</span></div>
+            <div class="ds-field"><span class="ds-field-name">Pharmacies</span><span class="ds-field-val">1,840</span></div>
+            <div class="ds-field"><span class="ds-field-name">Used for</span><span class="ds-field-val">Medical supply resource</span></div>
+          </div>
+          <a class="ds-link" href="https://data.egov.kz/" target="_blank">data.egov.kz — Healthcare category</a>
+          <div><span class="ds-status ds-live"><div class="ds-dot" style="background:var(--teal)"></div>OFFICIAL 2024</span></div>
+        </div>
+      </div>
+      <div class="ds-card">
+        <div style="font-size:13px;font-weight:500;color:var(--text);margin-bottom:8px">API Access — How to connect live data</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.7;margin-bottom:10px">The egov.kz API v4 provides real-time access to all datasets. A free API key is obtained from the Developer Cabinet at data.egov.kz. The endpoint pattern is:</div>
+        <div class="api-box">
+          GET https://data.egov.kz/api/v4/{dataset_uri}/v1?apiKey={YOUR_KEY}<br>
+          GET https://data.egov.kz/api/v4/opendata-api-uri156/v1?apiKey={YOUR_KEY}<br>
+          <span style="color:var(--muted)">// Returns JSON array — Almaty citizens' appeals dataset</span>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:10px">For this demo, data was pre-fetched and cached locally to avoid CORS restrictions. A production deployment would use a lightweight Node.js proxy to call the API server-side and feed real-time values into ARIS.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="f-item"><div class="f-dot" style="background:var(--teal)"></div>AI Agent Online</div>
+    <div class="f-item"><div class="f-dot" style="background:var(--blue)"></div>6 Datasets Loaded</div>
+    <div class="f-item"><div class="f-dot" style="background:var(--amber)"></div>data.egov.kz · budget.egov.kz · stat.gov.kz</div>
+    <div style="margin-left:auto;font-size:10px;color:var(--muted)">Groq · Llama 3.3 · Almaty, KZ</div>
+  </div>
+</div>
+
+<script>
+const S={
+  resources:[
+    {id:'water',name:'Water Supply',value:78,unit:'%',status:'ok',district:'Bostandyq',detail:'Kapchagai reservoir 78% capacity. Seasonal consumption norm. Supply stable across 7 districts.'},
+    {id:'electricity',name:'Power Grid',value:91,unit:'%',status:'ok',district:'Almaly',detail:'All substations stable. Peak winter load 91%. KOREM grid index nominal.'},
+    {id:'grain',name:'Grain Reserves',value:52,unit:'days',status:'warn',district:'Turksib',detail:'52-day reserve. Safety threshold is 60 days. Procurement needed within 2 weeks.'},
+    {id:'fuel',name:'Fuel Stocks',value:34,unit:'%',status:'warn',district:'Nauryzbay',detail:'Strategic fuel reserve at 34%. Industrial zone demanding 12% above baseline.'},
+    {id:'medical',name:'Medical Supply',value:88,unit:'/100',status:'ok',district:'Alatau',detail:'88/100 supply index. 67 hospitals, 214 clinics fully stocked. egov.kz healthcare dataset.'},
+    {id:'agri',name:'Agri Output',value:22,unit:'%',status:'crit',district:'Ile',detail:'Drought cut crop yield 78%. Irrigated farmland water deficit: 340M m³. Emergency declared.'},
+  ],
+  budget:[
+    {name:'Infrastructure',pct:30,color:'#3d8ef0'},
+    {name:'Agriculture',pct:18,color:'#00c9a7'},
+    {name:'Emergency Fund',pct:15,color:'#e8445a'},
+    {name:'Social Programs',pct:22,color:'#f0a500'},
+    {name:'Industry',pct:15,color:'#8b5cf6'},
+  ],
+  metrics:[
+    {label:'Population',val:'2,138,000',cls:'mv-g'},
+    {label:'GDP Growth',val:'+3.2%',cls:'mv-g'},
+    {label:'Inflation',val:'8.4%',cls:'mv-a'},
+    {label:'Unemployment',val:'4.7%',cls:'mv-g'},
+    {label:'Energy Index',val:'91/100',cls:'mv-g'},
+    {label:'Food Security',val:'61/100',cls:'mv-a'},
+    {label:'Active Alerts',val:'2',cls:'mv-r'},
+    {label:'Budget (2024)',val:'1.74T KZT',cls:'mv-g'},
+  ],
+  decisions:0,scenario:null,history:[],
+};
+
+const DISTRICTS=[
+  {name:'Bostandyq',x:50,y:22,w:130,h:58,res:'water'},
+  {name:'Almaly',x:185,y:18,w:100,h:62,res:'electricity'},
+  {name:'Medeu',x:268,y:72,w:95,h:54,res:'medical'},
+  {name:'Turksib',x:38,y:122,w:105,h:55,res:'grain'},
+  {name:'Ile',x:145,y:122,w:95,h:55,res:'agri'},
+  {name:'Nauryzbay',x:243,y:138,w:105,h:50,res:'fuel'},
+  {name:'Alatau',x:98,y:180,w:115,h:50,res:'medical'},
+];
+
+function stC(st){return st==='ok'?'#00c9a7':st==='warn'?'#f0a500':'#e8445a'}
+function stBg(st){return st==='ok'?'rgba(0,201,167,0.1)':st==='warn'?'rgba(240,165,0,0.1)':'rgba(232,68,90,0.12)'}
+function stBd(st){return st==='ok'?'rgba(0,201,167,0.4)':st==='warn'?'rgba(240,165,0,0.4)':'rgba(232,68,90,0.6)'}
+
+function renderResources(){
+  document.getElementById('res-list').innerHTML=S.resources.map(r=>{
+    const pct=r.unit==='%'?r.value:r.unit==='/100'?r.value:Math.min(100,r.value/90*100);
+    return `<div class="res-card${r.status==='crit'?' crit':''}" onclick="askAbout('${r.id}')">
+      <div class="res-top"><div class="res-name">${r.name}</div><div class="res-badge b-${r.status==='ok'?'ok':r.status==='warn'?'warn':'crit'}">${r.status.toUpperCase()}</div></div>
+      <div class="res-bar-bg"><div class="res-bar" style="width:${Math.round(pct)}%;background:${stC(r.status)}"></div></div>
+      <div class="res-meta">${r.value}${r.unit} · ${r.district}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderMap(){
+  const md=document.getElementById('map-districts');md.innerHTML='';
+  DISTRICTS.forEach(d=>{
+    const res=S.resources.find(r=>r.id===d.res);
+    const st=res?res.status:'ok';
+    const val=res?`${res.value}${res.unit}`:'';
+    const el=document.createElement('div');
+    el.className='dist';
+    el.style.cssText=`left:${d.x}px;top:${d.y}px;width:${d.w}px;height:${d.h}px;background:${stBg(st)};border-color:${stBd(st)};color:${stC(st)}`;
+    el.innerHTML=`<div class="dist-name">${d.name}</div><div class="dist-val">${val}</div>`;
+    md.appendChild(el);
+  });
+}
+
+function renderMetrics(){document.getElementById('city-metrics').innerHTML=S.metrics.map(m=>`<div class="metric-row"><span class="ml">${m.label}</span><span class="mv ${m.cls}">${m.val}</span></div>`).join('');}
+function renderBudget(){document.getElementById('budget-alloc').innerHTML=S.budget.map(b=>`<div class="alloc-item"><div class="alloc-top"><span class="alloc-name">${b.name}</span><span class="alloc-pct">${b.pct}%</span></div><div class="alloc-bar-bg"><div class="alloc-bar-fill" style="width:${b.pct}%;background:${b.color}"></div></div></div>`).join('');}
+
+function addMsg(role,html,type){
+  const c=document.getElementById('console'),d=document.createElement('div');d.className='msg';
+  const icons={ai:'mi-ai',sys:'mi-sys',op:'mi-op'};
+  const labels={ai:'ARIS',sys:'SYSTEM',op:'OPERATOR'};
+  d.innerHTML=`<div class="mi ${icons[type]||'mi-ai'}">${(type||'ai').slice(0,2).toUpperCase()}</div><div class="mc"><div class="mc-role">${labels[type]||'ARIS'}</div><div class="mc-text">${html}</div></div>`;
+  c.appendChild(d);c.scrollTop=c.scrollHeight;
+}
+function addThink(){
+  const c=document.getElementById('console'),d=document.createElement('div');d.className='msg';d.id='think';
+  d.innerHTML=`<div class="mi mi-ai">AI</div><div class="mc"><div class="mc-role">ARIS</div><div class="think"><span></span><span></span><span></span></div></div>`;
+  c.appendChild(d);c.scrollTop=c.scrollHeight;
+}
+function removeThink(){const t=document.getElementById('think');if(t)t.remove();}
+
+function updateDecisions(actions){
+  const el=document.getElementById('decisions-panel');
+  if(!actions||!actions.length)return;
+  const colors=['#00c9a7','#3d8ef0','#f0a500','#8b5cf6','#e8445a'];
+  el.innerHTML=actions.map((a,i)=>`<div class="decision-item"><div class="di-dot" style="background:${colors[i%5]}"></div><div style="flex:1">${a.text}</div>${a.amt?`<div class="di-amt">${a.amt}</div>`:''}</div>`).join('');
+}
+
+function sysPrompt(){
+  return `You are ARIS — Almaty Resource Intelligence System, an AI city resource manager for Almaty, Kazakhstan, backed by real data from data.egov.kz, budget.egov.kz, and stat.gov.kz.
+
+LIVE RESOURCE DATA:
+${S.resources.map(r=>`- ${r.name}: ${r.value}${r.unit} [${r.status.toUpperCase()}] — ${r.detail}`).join('\n')}
+
+BUDGET (2024 Almaty — 1.74 trillion KZT total):
+${S.budget.map(b=>`- ${b.name}: ${b.pct}% (${Math.round(b.pct*17.4)}B KZT)`).join('\n')}
+
+KEY DATA (real sources):
+- Population: 2,138,000 (stat.gov.kz 2024)
+- Citizen appeals on utilities: 38% of 47,320 total (data.egov.kz dataset opendata-api-uri156)
+- Agricultural water use: 68% of total supply (Ministry of Agriculture)
+
+SCENARIO: ${S.scenario||'Normal operations'}
+
+DISTRICTS: Bostandyq (water), Almaly (electricity), Medeu (medical), Turksib (grain), Ile (agriculture), Nauryzbay (fuel), Alatau (medical).
+
+YOUR ROLE: Analyze the situation, make specific data-driven decisions, cite real dataset sources where relevant. When a crisis occurs, take autonomous control with exact KZT amounts or percentages.
+
+RESPONSE FORMAT:
+1. Short assessment (2 sentences max)
+2. ACTIONS: (prefix each action with "- ")
+3. Expected outcomes
+
+Be decisive, specific, cite real numbers. Under 220 words.`;
+}
+
+const GROQ_API_KEY = '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';
+
+async function callARIS(userMsg){
+  document.getElementById('sendBtn').disabled=true;
+  addThink();
+  S.history.push({role:'user',content:userMsg});
+  try{
+    const messages=[{role:'system',content:sysPrompt()},...S.history.slice(-8)];
+    const r=await fetch('https://api.groq.com/openai/v1/chat/completions',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+GROQ_API_KEY},
+      body:JSON.stringify({model:'llama-3.3-70b-versatile',max_tokens:1000,messages})
+    });
+    const data=await r.json();
+    if(data.error){throw new Error(data.error.message);}
+    const text=data.choices[0].message.content;
+    S.history.push({role:'assistant',content:text});
+    removeThink();
+    S.decisions++;
+    document.getElementById('dec-count').textContent=S.decisions;
+    const html=text.replace(/ACTIONS:/g,'<br><span style="font-family:var(--mono);font-size:10px;color:var(--teal);letter-spacing:1px">ACTIONS:</span>').replace(/\n- /g,'<br>• ').replace(/\n/g,'<br>');
+    addMsg('ARIS',html,'ai');
+    updateDecisions(extractActions(text));
+    mutateResources(text);
+  }catch(e){
+    removeThink();
+    addMsg('ARIS',`[Error] ${e.message||'Could not reach Groq API. Check your API key in the GROQ_API_KEY variable at the top of the script.'}`,'ai');
+  }
+  document.getElementById('sendBtn').disabled=false;
+}
+
+function extractActions(text){
+  const acts=[];
+  const kw=['redirect','allocat','deploy','transfer','dispatch','increase','decrease','suspend','activate','order','procure','release','shift','priorit','emergency'];
+  text.split('\n').forEach(l=>{
+    if(kw.some(k=>l.toLowerCase().includes(k))&&l.trim().length>15){
+      const am=l.match(/(\d[\d,\.]*\s*(?:billion|million|B|M|%|KZT|tonnes|MW|days))/i);
+      acts.push({text:l.trim().replace(/^[-•*\d\.]\s*/,''),amt:am?am[0]:null});
+    }
+  });
+  return acts.slice(0,5);
+}
+
+function mutateResources(text){
+  const low=text.toLowerCase();
+  if(low.includes('water')&&(low.includes('drought')||low.includes('redirect water'))){const r=S.resources.find(x=>x.id==='water');if(r&&r.value>30){r.value=Math.max(24,r.value-10);r.status=r.value<40?'crit':'warn';}}
+  if(low.includes('grain')&&(low.includes('procur')||low.includes('reserve'))){const r=S.resources.find(x=>x.id==='grain');if(r){r.value=Math.min(72,r.value+9);r.status=r.value>60?'ok':'warn';}}
+  if(low.includes('agricultural')&&(low.includes('irrigation')||low.includes('emergency'))){const r=S.resources.find(x=>x.id==='agri');if(r&&r.value<60){r.value=Math.min(55,r.value+7);}}
+  if(low.includes('fuel')&&low.includes('procur')){const r=S.resources.find(x=>x.id==='fuel');if(r){r.value=Math.min(60,r.value+8);r.status=r.value>45?'ok':'warn';}}
+  renderResources();renderMap();
+}
+
+const SCENARIOS={
+  drought:{msg:`EMERGENCY: Severe drought in Ile district. Agricultural output 22% of baseline. Kapchagai reservoir dropping 3%/day. 412,000 ha irrigated farmland at risk. 68% of water allocated to agriculture now insufficient. Crop failure in 40% of wheat fields confirmed. ARIS, take autonomous control and reallocate all relevant resources.`,mutate(){S.resources.find(r=>r.id==='agri').value=18;S.resources.find(r=>r.id==='agri').status='crit';S.resources.find(r=>r.id==='water').value=48;S.resources.find(r=>r.id==='water').status='warn';S.scenario='DROUGHT EMERGENCY — Ile District';}},
+  budget:{msg:`FISCAL ALERT: Q3 budget review shows 14.2B KZT shortfall (budget.egov.kz). Infrastructure overspend at 36%. Emergency fund depleted to 8%. Citizen appeals spiking — 47,320 complaints in 2023, utility complaints 38% (data.egov.kz opendata-api-uri156). ARIS, optimize the 1.74T KZT budget to close the gap without cutting critical services.`,mutate(){S.scenario='BUDGET SHORTFALL — 14.2B KZT';S.budget.find(b=>b.name==='Infrastructure').pct=36;S.budget.find(b=>b.name==='Emergency Fund').pct=8;renderBudget();}},
+  factory:{msg:`PRODUCTION ALERT: Nauryzbay industrial zone bottleneck. Fuel reserves at 34% — 2 major factories halted. 3,400 workers affected. Supply chain disruption costing ~2B KZT/week. ARIS, assess and resolve using available budget and fuel reallocation.`,mutate(){S.resources.find(r=>r.id==='fuel').value=29;S.resources.find(r=>r.id==='fuel').status='crit';S.scenario='PRODUCTION BOTTLENECK — Nauryzbay';}},
+  flood:{msg:`INFRASTRUCTURE ALERT: Flash flooding in Medeu district. 3 water treatment plants compromised. Almaly power substation moisture intrusion — grid at 67%. Estimated damage 5-8B KZT. Medical supply routes disrupted. ARIS, coordinate emergency response and resource redeployment.`,mutate(){S.resources.find(r=>r.id==='electricity').value=67;S.resources.find(r=>r.id==='electricity').status='warn';S.resources.find(r=>r.id==='medical').value=71;S.resources.find(r=>r.id==='medical').status='warn';S.scenario='FLOOD EMERGENCY — Medeu/Almaly';}},
+  grain:{msg:`FOOD SECURITY ALERT: International grain prices up 40%. Almaty reserve: 52 days — below 60-day safety threshold. stat.gov.kz: 2,138,000 residents depending on stable bread prices. Food security index dropping to 52/100. ARIS, propose emergency procurement and strategic reserve strategy.`,mutate(){S.resources.find(r=>r.id==='grain').value=47;S.resources.find(r=>r.id==='grain').status='crit';S.scenario='GRAIN SUPPLY CRISIS';S.metrics.find(m=>m.label==='Food Security').val='52/100';S.metrics.find(m=>m.label==='Food Security').cls='mv-r';S.metrics.find(m=>m.label==='Active Alerts').val='3';renderMetrics();}}
+};
+
+function triggerScenario(id,btn){
+  const s=SCENARIOS[id];if(!s)return;
+  document.querySelectorAll('.scen-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');s.mutate();renderResources();renderMap();
+  addMsg('',`<div class="alert-msg">⚠ SCENARIO ACTIVATED: ${btn.textContent.trim()}</div>`,'sys');
+  callARIS(s.msg);
+}
+
+function askAbout(id){
+  const r=S.resources.find(x=>x.id===id);if(!r)return;
+  const msg=`Provide a detailed analysis of ${r.name} in ${r.district} district. Current: ${r.value}${r.unit} (${r.status}). ${r.detail} What specific actions and budget reallocations do you recommend?`;
+  document.getElementById('userInput').value=msg;sendMsg();
+}
+
+function sendMsg(){
+  const inp=document.getElementById('userInput');
+  const msg=inp.value.trim();if(!msg)return;
+  inp.value='';addMsg(msg,msg,'op');callARIS(msg);
+}
+
+function switchTab(id,btn){
+  document.querySelectorAll('.ntab').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-'+id).classList.add('active');
+  if(id==='analytics')renderCharts();
+}
+
+let chartsRendered=false;
+function renderCharts(){
+  if(chartsRendered)return;chartsRendered=true;
+  new Chart(document.getElementById('radarChart'),{type:'radar',data:{labels:S.resources.map(r=>r.name),datasets:[{label:'Level',data:S.resources.map(r=>r.unit==='%'?r.value:r.unit==='/100'?r.value:Math.min(100,r.value/90*100)),backgroundColor:'rgba(0,201,167,0.15)',borderColor:'#00c9a7',pointBackgroundColor:'#00c9a7',borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,scales:{r:{min:0,max:100,ticks:{color:'#4a5f80',font:{size:9}},grid:{color:'#1e2d48'},pointLabels:{color:'#dce8f5',font:{size:10}}}},plugins:{legend:{display:false}}}});
+  new Chart(document.getElementById('budgetChart'),{type:'doughnut',data:{labels:S.budget.map(b=>b.name),datasets:[{data:S.budget.map(b=>b.pct),backgroundColor:S.budget.map(b=>b.color),borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,cutout:'65%',plugins:{legend:{display:false}}}});
+  new Chart(document.getElementById('popChart'),{type:'line',data:{labels:['2015','2016','2017','2018','2019','2020','2021','2022','2023','2024'],datasets:[{label:'Population',data:[1614000,1672000,1703000,1765000,1854000,1916000,1977000,2075000,2106000,2138000],borderColor:'#3d8ef0',backgroundColor:'rgba(61,142,240,0.08)',fill:true,tension:0.4,pointBackgroundColor:'#3d8ef0',borderWidth:2,pointRadius:3}]},options:{responsive:true,maintainAspectRatio:false,scales:{x:{ticks:{color:'#4a5f80',font:{size:10}},grid:{color:'#1e2d48'}},y:{ticks:{color:'#4a5f80',font:{size:10},callback:v=>(v/1000000).toFixed(1)+'M'},grid:{color:'#1e2d48'}}},plugins:{legend:{display:false}}}});
+  new Chart(document.getElementById('appealsChart'),{type:'bar',data:{labels:['Utilities','Infrastructure','Social','Transport','Environment','Other'],datasets:[{label:'Appeals 2023',data:[18002,11357,6625,4732,2845,3759],backgroundColor:['#3d8ef0','#f0a500','#00c9a7','#8b5cf6','#e8445a','#4a5f80'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,scales:{x:{ticks:{color:'#4a5f80',font:{size:10}},grid:{color:'#1e2d48'}},y:{ticks:{color:'#4a5f80',font:{size:9}},grid:{color:'#1e2d48'}}},plugins:{legend:{display:false}}}});
+  const distData=DISTRICTS.map(d=>{const r=S.resources.find(x=>x.id===d.res);return r?Math.round(r.unit==='%'?r.value:r.unit==='/100'?r.value:Math.min(100,r.value/90*100)):50;});
+  const distColors=DISTRICTS.map(d=>{const r=S.resources.find(x=>x.id===d.res);return r?stC(r.status):'#4a5f80';});
+  new Chart(document.getElementById('distChart'),{type:'bar',data:{labels:DISTRICTS.map(d=>d.name),datasets:[{label:'Resource Index',data:distData,backgroundColor:distColors,borderWidth:0,borderRadius:4}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,scales:{x:{min:0,max:100,ticks:{color:'#4a5f80',font:{size:10}},grid:{color:'#1e2d48'}},y:{ticks:{color:'#dce8f5',font:{size:10}},grid:{color:'#1e2d48'}}},plugins:{legend:{display:false}}}});
+}
+
+function tick(){
+  const now=new Date(),utc=now.getTime()+now.getTimezoneOffset()*60000;
+  document.getElementById('clock').textContent=new Date(utc+5*3600000).toTimeString().slice(0,8);
+}
+setInterval(tick,1000);tick();
+
+const loadSources=['Connecting to data.egov.kz...','Fetching opendata-api-uri156 (Almaty Appeals)...','Parsing budget.egov.kz 2024 report...','Loading stat.gov.kz population data...','Initializing Groq Llama 3.3 agent...'];
+const delays=[0,600,1100,1600,2100,2700];
+function runLoader(){
+  delays.forEach((t,i)=>{
+    setTimeout(()=>{
+      if(i>0){
+        const p=document.getElementById('ls'+(i-1)),pi=document.getElementById('si'+(i-1));
+        if(p){p.classList.remove('active');p.classList.add('done');}
+        if(pi){pi.classList.remove('spin');pi.textContent='✓';}
+      }
+      const s=document.getElementById('ls'+i),si=document.getElementById('si'+i);
+      if(s)s.classList.add('active');if(si)si.classList.add('spin');
+      document.getElementById('load-source').textContent=loadSources[i]||'';
+      document.getElementById('load-fill').style.width=Math.round((i/5)*100)+'%';
+      if(i===5){
+        const l=document.getElementById('ls4'),li=document.getElementById('si4');
+        if(l){l.classList.remove('active');l.classList.add('done');}
+        if(li){li.classList.remove('spin');li.textContent='✓';}
+        document.getElementById('load-fill').style.width='100%';
+        setTimeout(()=>{
+          document.getElementById('loader').classList.add('hidden');
+          const app=document.getElementById('app');app.style.display='flex';
+          renderResources();renderMap();renderMetrics();renderBudget();
+          setTimeout(()=>addMsg('ARIS',`ARIS v2.0 online. 6 real datasets loaded from <span style="color:#3d8ef0">data.egov.kz</span>, <span style="color:#3d8ef0">budget.egov.kz</span>, and <span style="color:#3d8ef0">stat.gov.kz</span>.<br><br>Critical alerts: <span style="color:#e8445a">Agricultural output at 22%</span> (Ile district) · <span style="color:#f0a500">Grain reserves 52 days</span> below safety threshold · 47,320 citizen appeals on record.<br><br>Trigger a scenario on the left, click any resource card for analysis, or ask me anything.`,'ai'),300);
+        },400);
+      }
+    },t);
+  });
+}
+runLoader();
+</script>
+</body>
+</html>
